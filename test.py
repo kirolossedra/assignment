@@ -68,12 +68,13 @@ target_pose_6dof = np.array([1.2, 0.8, 1.0, 0.2, 0.3, 0.5])  # Full 6DOF target
 target_pose_simplified = np.array([1.2, 0.8, 1.0, 1.5])      # Simplified 4DOF target
 
 # Enhanced Jacobian pseudoinverse calculation with better numerical stability
-def JacobianPseudoinverse(J, damping_factor=1e-4):
+def JacobianPseudoinverse(J, damping_factor=0.1):
     """
     Compute the damped pseudoinverse of Jacobian matrix
     Uses damped least squares for better numerical stability
+    Higher damping factor makes it more conservative but stable
     """
-    # Damped least squares pseudoinverse
+    # Damped least squares pseudoinverse with realistic damping
     JTJ = J.T @ J
     damping_matrix = damping_factor * np.eye(JTJ.shape[0])
     J_pinv = np.linalg.inv(JTJ + damping_matrix) @ J.T
