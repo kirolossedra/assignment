@@ -189,12 +189,11 @@ def IK_Jacobian_Spatial(IK_alg, manipulator, target_pose, initial_guess,
 # Initial guess for joint angles (4 joints for spatial manipulator)
 initial_guess_spatial = [0.3, 0.5, 0.2, 0.1]
 
-# Define IK algorithms to test
+# Define the three main IK algorithms for comparison
 IK_algorithms = {
-    'Jacobian Transpose': JacobianTranspose,
-    'Jacobian Transpose Adaptive': JacobianTranspose_Adaptive,
-    'Jacobian Pseudoinverse (Damped)': JacobianPseudoinverse,
-    'Jacobian Pseudoinverse (SVD)': JacobianPseudoinverse_SVD
+    'Jacobian Pseudoinverse': JacobianPseudoinverse_SVD,
+    'Jacobian Damped-Least-Squares': JacobianPseudoinverse,
+    'Jacobian Transpose': JacobianTranspose
 }
 
 # Storage for results
@@ -473,8 +472,8 @@ if __name__ == "__main__":
     print(f"Base Height: d1={d1}")
     
     # Choose which algorithm to focus on for detailed plots (mimicking original code structure)
-    # Change index i to select different algorithms: 0=Transpose, 1=Transpose_Adaptive, 2=Pseudoinverse_Damped, 3=Pseudoinverse_SVD
-    i = 2  # Default to Damped Pseudoinverse (usually best performance)
+    # Change index i to select different algorithms: 0=Pseudoinverse, 1=Damped-Least-Squares, 2=Transpose
+    i = 1  # Default to Damped-Least-Squares (usually best performance)
     
     algorithm_list = list(IK_algorithms.keys())
     selected_algorithm = algorithm_list[i]
@@ -515,8 +514,8 @@ if __name__ == "__main__":
     # Additional 3D-specific plots
     plot_joint_trajectories(joint_traj_IK_alg, selected_algorithm)
     
-    # Run comparison of all algorithms (like your original but extended)
-    print(f"\nRunning comparison of all {len(IK_algorithms)} algorithms...")
+    # Run comparison of all three main algorithms (like your original but extended)
+    print(f"\nRunning comparison of all {len(IK_algorithms)} main IK algorithms...")
     all_results = {}
     
     for alg_name, alg_func in IK_algorithms.items():
@@ -541,7 +540,12 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("SPATIAL RRR MANIPULATOR - INVERSE KINEMATICS COMPLETE")
     print("="*80)
-    print(f"Target achieved with {selected_algorithm}")
+    print("Three Main IK Methods Compared:")
+    print("(i) Jacobian Pseudoinverse")
+    print("(ii) Jacobian Damped-Least-Squares") 
+    print("(iii) Jacobian Transpose")
+    print("-"*80)
+    print(f"Detailed analysis performed with: {selected_algorithm}")
     print(f"Final joint configuration: {pose_IK_alg}")
     print(f"Final end-effector pose: {traj_IK_alg[-1]}") 
     print(f"Target pose was: {target_pose_simplified}")
