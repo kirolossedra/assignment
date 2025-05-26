@@ -197,200 +197,152 @@ IK_algorithms = {
     'Jacobian Transpose': JacobianTranspose
 }
 
-# Storage for results
-results = {}
-
-# Test each IK algorithm
-for alg_name, alg_func in IK_algorithms.items():
-    print(f"\nTesting {alg_name}...")
-    
-    pose_result, traj_result, error_result, joint_traj, conv_metrics = IK_Jacobian_Spatial(
-        alg_func, spatial_rrr, target_pose_simplified, initial_guess_spatial,
-        pose_func=ee_pose_simplified, gamma=0.008, max_iter=1500, tolerance=1e-5
-    )
-    
-    results[alg_name] = {
-        'final_pose': pose_result,
-        'trajectory': traj_result,
-        'errors': error_result,
-        'joint_trajectory': joint_traj,
-        'convergence': conv_metrics
-    }
-
-# Enhanced 3D plotting functions
-def plot_3d_trajectory(trajectory, target_pose, title, algorithm_name):
+# Enhanced plotting functions for ALL algorithms comparison
+def plot_all_3d_trajectories(all_results, target_pose):
     """
-    Plot 3D trajectory of end-effector movement
+    Plot 3D trajectories of all algorithms in separate subplots
     """
-    trajectory = np.array(trajectory)
+    fig = plt.figure(figsize=(18, 6))
     
-    fig = plt.figure(figsize=(12, 10))
-    ax = fig.add_subplot(111, projection='3d')
+    colors = ['blue', 'orange', 'green']
+    algorithm_names = list(all_results.keys())
     
-    # Plot trajectory
-    ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], 
-            'b-o', linewidth=2, markersize=3, label='End Effector Path', alpha=0.7)
+    for i, (alg_name, result) in enumerate(all_results.items()):
+        trajectory = np.array(result['trajectory'])
+        
+        ax = fig.add_subplot(1, 3, i+1, projection='3d')
+        
+        # Plot trajectory
+        ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], 
+                color=colors[i], linewidth=2, marker='o', markersize=2, 
+                label='End Effector Path', alpha=0.8)
+        
+        # Plot start and target positions
+        ax.scatter(trajectory[0, 0], trajectory[0, 1], trajectory[0, 2], 
+                   c='green', s=100, marker='o', label='Start')
+        ax.scatter(target_pose[0], target_pose[1], target_pose[2], 
+                   c='red', s=150, marker='X', label='Target')
+        
+        # Add workspace boundary
+        max_reach = L1 + L2 + L3
+        u = np.linspace(0, 2 * np.pi, 20)
+        v = np.linspace(0, np.pi, 20)
+        x_sphere = max_reach * np.outer(np.cos(u), np.sin(v))
+        y_sphere = max_reach * np.outer(np.sin(u), np.sin(v))
+        z_sphere = max_reach * np.outer(np.ones(np.size(u)), np.cos(v))
+        ax.plot_surface(x_sphere, y_sphere, z_sphere, alpha=0.1, color='gray')
+        
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_zlabel('Z (m)')
+        ax.set_title(f'{alg_name}\n{len(trajectory)} iterations')
+        ax.legend(fontsize=8)
+        
+        # Set equal aspect ratio
+        ax.set_xlim([-max_reach, max_reach])
+        ax.set_ylim([-max_reach, max_reach])
+        ax.set_zlim([0, max_reach*1.5])
     
-    # Plot start and target positions
-    ax.scatter(trajectory[0, 0], trajectory[0, 1], trajectory[0, 2], 
-               c='green', s=100, marker='o', label='Start Position')
-    ax.scatter(target_pose[0], target_pose[1], target_pose[2], 
-               c='red', s=150, marker='X', label='Target Position')
+    plt.suptitle('3D End-Effector Trajectories - All Algorithms', fontsize=16)
+    plt.tight_layout()
+    plt.show()
+
+def plot_all_spatial_errors(all_results, target_pose):
+    """
+    Plot errors for all spatial dimensions for ALL algorithms
+    """
+    fig, axs = plt.subplots(4, 3, figsize=(18, 16))
+    fig.suptitle('Error Analysis - All IK Algorithms Comparison', fontsize=16)
     
-    # Add workspace boundaries (approximate)
-    max_reach = L1 + L2 + L3
-    u = np.linspace(0, 2 * np.pi, 50)
-    v = np.linspace(0, np.pi, 50)
-    x_sphere = max_reach * np.outer(np.cos(u), np.sin(v))
-    y_sphere = max_reach * np.outer(np.sin(u), np.sin(v))
-    z_sphere = max_reach * np.outer(np.ones(np.size(u)), np.cos(v))
-    ax.plot_surface(x_sphere, y_sphere, z_sphere, alpha=0.1, color='gray')
+    colors = ['blue', 'orange', 'green']
+    error_labels = ['X Error (m)', 'Y Error (m)', 'Z Error (m)', 'Theta Error (rad)']
+    algorithm_names = list(all_results.keys())
     
-    ax.set_xlabel('X Position (m)', fontsize=12)
-    ax.set_ylabel('Y Position (m)', fontsize=12)
-    ax.set_zlabel('Z Position (m)', fontsize=12)
-    ax.legend(fontsize=10)
-    ax.set_title(f'3D End-Effector Trajectory - {algorithm_name}\n{title}', fontsize=14)
-    ax.grid(True)
-    
-    # Set equal aspect ratio
-    max_range = max_reach
-    ax.set_xlim([-max_range, max_range])
-    ax.set_ylim([-max_range, max_range])
-    ax.set_zlim([0, max_range*1.5])
+    for col, (alg_name, result) in enumerate(all_results.items()):
+        errors = np.array(result['errors'])
+        iterations = range(len(errors))
+        
+        for row in range(4):
+            axs[row, col].plot(iterations, errors[:, row], 
+                              color=colors[col], linewidth=2, alpha=0.8)
+            axs[row, col].axhline(y=0, color='red', linestyle='--', alpha=0.5)
+            axs[row, col].set_ylabel(error_labels[row])
+            axs[row, col].grid(True, alpha=0.3)
+            axs[row, col].tick_params(axis='both', which='major', labelsize=10)
+            
+            if row == 0:
+                axs[row, col].set_title(f'{alg_name}')
+            if row == 3:
+                axs[row, col].set_xlabel('Iteration')
     
     plt.tight_layout()
     plt.show()
 
-def plot_spatial_errors(errors, title, algorithm_name):
+def plot_all_spatial_trajectories(all_results, target_pose):
     """
-    Plot errors for all spatial dimensions
+    Plot executed trajectories for all spatial dimensions for ALL algorithms
     """
-    errors = np.array(errors)
-    iterations = range(len(errors))
+    fig, axs = plt.subplots(4, 3, figsize=(18, 16))
+    fig.suptitle('Position/Orientation Trajectories - All IK Algorithms', fontsize=16)
     
-    fig, axs = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle(f'Error Analysis - {algorithm_name}\n{title}', fontsize=16)
+    colors = ['blue', 'orange', 'green']
+    traj_labels = ['X Position (m)', 'Y Position (m)', 'Z Position (m)', 'Theta (rad)']
+    algorithm_names = list(all_results.keys())
     
-    # Plot error for x
-    axs[0, 0].plot(iterations, errors[:, 0], label='Error in X', linewidth=2, color='blue')
-    axs[0, 0].set_xlabel('Iteration', fontsize=12)
-    axs[0, 0].set_ylabel('Error in X (m)', fontsize=12)
-    axs[0, 0].legend(fontsize=10)
-    axs[0, 0].set_title('X Position Error', fontsize=12)
-    axs[0, 0].grid(True, alpha=0.3)
-    axs[0, 0].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot error for y
-    axs[0, 1].plot(iterations, errors[:, 1], label='Error in Y', linewidth=2, color='orange')
-    axs[0, 1].set_xlabel('Iteration', fontsize=12)
-    axs[0, 1].set_ylabel('Error in Y (m)', fontsize=12)
-    axs[0, 1].legend(fontsize=10)
-    axs[0, 1].set_title('Y Position Error', fontsize=12)
-    axs[0, 1].grid(True, alpha=0.3)
-    axs[0, 1].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot error for z
-    axs[1, 0].plot(iterations, errors[:, 2], label='Error in Z', linewidth=2, color='green')
-    axs[1, 0].set_xlabel('Iteration', fontsize=12)
-    axs[1, 0].set_ylabel('Error in Z (m)', fontsize=12)
-    axs[1, 0].legend(fontsize=10)
-    axs[1, 0].set_title('Z Position Error', fontsize=12)
-    axs[1, 0].grid(True, alpha=0.3)
-    axs[1, 0].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot error for orientation (theta)
-    axs[1, 1].plot(iterations, errors[:, 3], label='Error in Theta', linewidth=2, color='red')
-    axs[1, 1].set_xlabel('Iteration', fontsize=12)
-    axs[1, 1].set_ylabel('Error in Theta (rad)', fontsize=12)
-    axs[1, 1].legend(fontsize=10)
-    axs[1, 1].set_title('Orientation Error', fontsize=12)
-    axs[1, 1].grid(True, alpha=0.3)
-    axs[1, 1].tick_params(axis='both', which='major', labelsize=10)
+    for col, (alg_name, result) in enumerate(all_results.items()):
+        trajectory = np.array(result['trajectory'])
+        iterations = range(len(trajectory))
+        
+        for row in range(4):
+            axs[row, col].plot(iterations, trajectory[:, row], 
+                              color=colors[col], linewidth=2, alpha=0.8, 
+                              label='Executed')
+            axs[row, col].axhline(y=target_pose[row], color='red', 
+                                 linestyle='--', linewidth=2, alpha=0.8, 
+                                 label='Target')
+            axs[row, col].set_ylabel(traj_labels[row])
+            axs[row, col].grid(True, alpha=0.3)
+            axs[row, col].tick_params(axis='both', which='major', labelsize=10)
+            
+            if row == 0:
+                axs[row, col].set_title(f'{alg_name}')
+                axs[row, col].legend(fontsize=8)
+            if row == 3:
+                axs[row, col].set_xlabel('Iteration')
     
     plt.tight_layout()
     plt.show()
 
-def plot_spatial_trajectories(trajectory, target_pose, algorithm_name):
+def plot_all_joint_trajectories(all_results):
     """
-    Plot executed trajectories for all spatial dimensions
+    Plot joint angle trajectories for ALL algorithms
     """
-    trajectory = np.array(trajectory)
-    iterations = range(len(trajectory))
+    fig, axs = plt.subplots(4, 3, figsize=(18, 16))
+    fig.suptitle('Joint Angle Trajectories - All IK Algorithms', fontsize=16)
     
-    fig, axs = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle(f'Executed Trajectories - {algorithm_name}', fontsize=16)
-    
-    # Plot executed x trajectory
-    axs[0, 0].plot(iterations, trajectory[:, 0], label='Executed X', linewidth=2, color='blue')
-    axs[0, 0].axhline(y=target_pose[0], color='red', linestyle='--', 
-                      label='Target X', linewidth=2, alpha=0.8)
-    axs[0, 0].set_xlabel('Iteration', fontsize=12)
-    axs[0, 0].set_ylabel('X Position (m)', fontsize=12)
-    axs[0, 0].legend(fontsize=10)
-    axs[0, 0].set_title('X Position Trajectory', fontsize=12)
-    axs[0, 0].grid(True, alpha=0.3)
-    axs[0, 0].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot executed y trajectory
-    axs[0, 1].plot(iterations, trajectory[:, 1], label='Executed Y', linewidth=2, color='orange')
-    axs[0, 1].axhline(y=target_pose[1], color='red', linestyle='--', 
-                      label='Target Y', linewidth=2, alpha=0.8)
-    axs[0, 1].set_xlabel('Iteration', fontsize=12)
-    axs[0, 1].set_ylabel('Y Position (m)', fontsize=12)
-    axs[0, 1].legend(fontsize=10)
-    axs[0, 1].set_title('Y Position Trajectory', fontsize=12)
-    axs[0, 1].grid(True, alpha=0.3)
-    axs[0, 1].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot executed z trajectory
-    axs[1, 0].plot(iterations, trajectory[:, 2], label='Executed Z', linewidth=2, color='green')
-    axs[1, 0].axhline(y=target_pose[2], color='red', linestyle='--', 
-                      label='Target Z', linewidth=2, alpha=0.8)
-    axs[1, 0].set_xlabel('Iteration', fontsize=12)
-    axs[1, 0].set_ylabel('Z Position (m)', fontsize=12)
-    axs[1, 0].legend(fontsize=10)
-    axs[1, 0].set_title('Z Position Trajectory', fontsize=12)
-    axs[1, 0].grid(True, alpha=0.3)
-    axs[1, 0].tick_params(axis='both', which='major', labelsize=10)
-    
-    # Plot executed theta trajectory
-    axs[1, 1].plot(iterations, trajectory[:, 3], label='Executed Theta', linewidth=2, color='red')
-    axs[1, 1].axhline(y=target_pose[3], color='red', linestyle='--', 
-                      label='Target Theta', linewidth=2, alpha=0.8)
-    axs[1, 1].set_xlabel('Iteration', fontsize=12)
-    axs[1, 1].set_ylabel('Theta (rad)', fontsize=12)
-    axs[1, 1].legend(fontsize=10)
-    axs[1, 1].set_title('Orientation Trajectory', fontsize=12)
-    axs[1, 1].grid(True, alpha=0.3)
-    axs[1, 1].tick_params(axis='both', which='major', labelsize=10)
-    
-    plt.tight_layout()
-    plt.show()
-
-def plot_joint_trajectories(joint_trajectory, algorithm_name):
-    """
-    Plot joint angle trajectories
-    """
-    joint_trajectory = np.array(joint_trajectory)
-    iterations = range(len(joint_trajectory))
-    
-    fig, axs = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle(f'Joint Angle Trajectories - {algorithm_name}', fontsize=16)
-    
+    colors = ['blue', 'orange', 'green']
     joint_names = ['Base (θ₁)', 'Shoulder (θ₂)', 'Elbow (θ₃)', 'Wrist (θ₄)']
-    colors = ['blue', 'orange', 'green', 'red']
+    algorithm_names = list(all_results.keys())
     
-    for i in range(4):
-        row, col = i // 2, i % 2
-        axs[row, col].plot(iterations, joint_trajectory[:, i], 
-                          linewidth=2, color=colors[i], label=f'Joint {i+1}')
-        axs[row, col].set_xlabel('Iteration', fontsize=12)
-        axs[row, col].set_ylabel('Joint Angle (rad)', fontsize=12)
-        axs[row, col].set_title(f'{joint_names[i]} Trajectory', fontsize=12)
-        axs[row, col].grid(True, alpha=0.3)
-        axs[row, col].tick_params(axis='both', which='major', labelsize=10)
-        axs[row, col].legend(fontsize=10)
+    for col, (alg_name, result) in enumerate(all_results.items()):
+        joint_trajectory = np.array(result['joint_trajectory'])
+        iterations = range(len(joint_trajectory))
+        
+        for row in range(4):
+            axs[row, col].plot(iterations, joint_trajectory[:, row], 
+                              color=colors[col], linewidth=2, alpha=0.8)
+            axs[row, col].set_ylabel('Angle (rad)')
+            axs[row, col].grid(True, alpha=0.3)
+            axs[row, col].tick_params(axis='both', which='major', labelsize=10)
+            
+            if row == 0:
+                axs[row, col].set_title(f'{alg_name}')
+            if col == 0:
+                axs[row, col].text(-0.15, 0.5, joint_names[row], 
+                                  transform=axs[row, col].transAxes, 
+                                  rotation=90, va='center', fontweight='bold')
+            if row == 3:
+                axs[row, col].set_xlabel('Iteration')
     
     plt.tight_layout()
     plt.show()
@@ -421,135 +373,95 @@ def plot_convergence_comparison(results):
     plt.tight_layout()
     plt.show()
 
-# Generate comprehensive plots for the best performing algorithm
-best_algorithm = 'Jacobian Pseudoinverse (Damped)'  # Usually performs best
-if best_algorithm in results:
-    result = results[best_algorithm]
-    
-    print(f"\nGenerating comprehensive plots for {best_algorithm}...")
-    
-    # 3D trajectory plot
-    plot_3d_trajectory(result['trajectory'], target_pose_simplified, 
-                      'Spatial RRR Manipulator', best_algorithm)
-    
-    # Error analysis
-    plot_spatial_errors(result['errors'], 'Error Evolution', best_algorithm)
-    
-    # Trajectory plots
-    plot_spatial_trajectories(result['trajectory'], target_pose_simplified, best_algorithm)
-    
-    # Joint trajectories
-    plot_joint_trajectories(result['joint_trajectory'], best_algorithm)
-
-# Convergence comparison
-plot_convergence_comparison(results)
-
-# Print final results summary
-print("\n" + "="*80)
-print("INVERSE KINEMATICS RESULTS SUMMARY")
-print("="*80)
-print(f"Target Pose: {target_pose_simplified}")
-print(f"Initial Guess: {initial_guess_spatial}")
-print("-"*80)
-
-for alg_name, result in results.items():
-    final_pose = result['trajectory'][-1]
-    final_error = np.linalg.norm(result['errors'][-1])
-    iterations = len(result['trajectory'])
-    
-    print(f"\n{alg_name}:")
-    print(f"  Final Pose: [{final_pose[0]:.4f}, {final_pose[1]:.4f}, {final_pose[2]:.4f}, {final_pose[3]:.4f}]")
-    print(f"  Final Error Norm: {final_error:.6f}")
-    print(f"  Iterations: {iterations}")
-    print(f"  Joint Angles: [{result['final_pose'][0]:.4f}, {result['final_pose'][1]:.4f}, {result['final_pose'][2]:.4f}, {result['final_pose'][3]:.4f}]")
-
-print("\n" + "="*80)
-
-# MAIN EXECUTION - Run the complete analysis
+# MAIN EXECUTION - Complete Analysis with All Algorithms
 if __name__ == "__main__":
     print("Starting Spatial RRR Anthropomorphic Manipulator IK Analysis...")
     print(f"Robot Configuration: {spatial_rrr.name}")
     print(f"Link Lengths: L1={L1}, L2={L2}, L3={L3}")
     print(f"Base Height: d1={d1}")
+    print(f"Target Pose: {target_pose_simplified}")
+    print(f"Initial Guess: {initial_guess_spatial}")
     
-    # Choose which algorithm to focus on for detailed plots (mimicking original code structure)
-    # Change index i to select different algorithms: 0=Pseudoinverse, 1=Damped-Least-Squares, 2=Transpose
-    i = 1  # Default to Damped-Least-Squares (usually best performance)
-    
-    algorithm_list = list(IK_algorithms.keys())
-    selected_algorithm = algorithm_list[i]
-    
-    print(f"\nRunning detailed analysis with: {selected_algorithm}")
-    
-    # Run the selected algorithm (mimicking your original structure)
-    pose_IK_alg, traj_IK_alg, error_IK_alg, joint_traj_IK_alg, conv_IK_alg = IK_Jacobian_Spatial(
-        list(IK_algorithms.values())[i], 
-        spatial_rrr, 
-        target_pose_simplified, 
-        initial_guess_spatial,
-        pose_func=ee_pose_simplified, 
-        gamma=0.008, 
-        max_iter=1500, 
-        tolerance=1e-5
-    )
-    
-    print(f"\nSelected Algorithm Results:")
-    print(f"Final Joint Configuration: {pose_IK_alg}")
-    print(f"Final End-Effector Pose: {traj_IK_alg[-1]}")
-    print(f"Final Error: {error_IK_alg[-1]}")
-    print(f"Convergence achieved in {len(traj_IK_alg)} iterations")
-    
-    # Generate all plots for the selected algorithm (mimicking your original plotting calls)
-    print(f"\nGenerating plots for {selected_algorithm}...")
-    
-    # 3D Trajectory plot (equivalent to your plot_trajectory)
-    plot_3d_trajectory(traj_IK_alg, target_pose_simplified, 
-                      f'3D Trajectory - {selected_algorithm}', selected_algorithm)
-    
-    # Error plots (equivalent to your plot_errors) 
-    plot_spatial_errors(error_IK_alg, f'Spatial Errors - {selected_algorithm}', selected_algorithm)
-    
-    # Executed trajectory plots (equivalent to your plot_executed_trajectories)
-    plot_spatial_trajectories(traj_IK_alg, target_pose_simplified, selected_algorithm)
-    
-    # Additional 3D-specific plots
-    plot_joint_trajectories(joint_traj_IK_alg, selected_algorithm)
-    
-    # Run comparison of all three main algorithms (like your original but extended)
-    print(f"\nRunning comparison of all {len(IK_algorithms)} main IK algorithms...")
+    # Storage for results
     all_results = {}
     
+    # Test each IK algorithm
+    print("\n" + "="*60)
+    print("RUNNING ALL IK ALGORITHMS...")
+    print("="*60)
+    
     for alg_name, alg_func in IK_algorithms.items():
-        print(f"Testing {alg_name}...")
-        pose_result, traj_result, error_result, joint_result, conv_result = IK_Jacobian_Spatial(
+        print(f"\nTesting {alg_name}...")
+        
+        pose_result, traj_result, error_result, joint_traj, conv_metrics = IK_Jacobian_Spatial(
             alg_func, spatial_rrr, target_pose_simplified, initial_guess_spatial,
             pose_func=ee_pose_simplified, gamma=0.008, max_iter=1500, tolerance=1e-5
         )
         
         all_results[alg_name] = {
             'final_pose': pose_result,
-            'trajectory': traj_result, 
+            'trajectory': traj_result,
             'errors': error_result,
-            'joint_trajectory': joint_result,
-            'convergence': conv_result
+            'joint_trajectory': joint_traj,
+            'convergence': conv_metrics
         }
     
-    # Convergence comparison plot
+    # Generate comprehensive plots for ALL algorithms
+    print("\n" + "="*60)
+    print("GENERATING COMPREHENSIVE PLOTS FOR ALL ALGORITHMS...")
+    print("="*60)
+    
+    # 1. 3D trajectory plots for all algorithms
+    print("Generating 3D trajectory comparison...")
+    plot_all_3d_trajectories(all_results, target_pose_simplified)
+    
+    # 2. Error analysis for all algorithms
+    print("Generating error analysis for all algorithms...")
+    plot_all_spatial_errors(all_results, target_pose_simplified)
+    
+    # 3. Position/orientation trajectory plots for all algorithms
+    print("Generating position/orientation trajectories for all algorithms...")
+    plot_all_spatial_trajectories(all_results, target_pose_simplified)
+    
+    # 4. Joint trajectory plots for all algorithms
+    print("Generating joint trajectory plots for all algorithms...")
+    plot_all_joint_trajectories(all_results)
+    
+    # 5. Convergence comparison
+    print("Generating convergence comparison...")
     plot_convergence_comparison(all_results)
     
-    # Final summary (matching your original format)
+    # Print comprehensive results summary
     print("\n" + "="*80)
-    print("SPATIAL RRR MANIPULATOR - INVERSE KINEMATICS COMPLETE")
+    print("COMPREHENSIVE INVERSE KINEMATICS RESULTS SUMMARY")
     print("="*80)
-    print("Three Main IK Methods Compared:")
-    print("(i) Jacobian Pseudoinverse")
-    print("(ii) Jacobian Damped-Least-Squares") 
-    print("(iii) Jacobian Transpose")
+    print(f"Target Pose: {target_pose_simplified}")
+    print(f"Initial Guess: {initial_guess_spatial}")
     print("-"*80)
-    print(f"Detailed analysis performed with: {selected_algorithm}")
-    print(f"Final joint configuration: {pose_IK_alg}")
-    print(f"Final end-effector pose: {traj_IK_alg[-1]}") 
-    print(f"Target pose was: {target_pose_simplified}")
-    print(f"Position error: {np.linalg.norm(error_IK_alg[-1][:3]):.6f} m")
-    print(f"Orientation error: {abs(error_IK_alg[-1][3]):.6f} rad")
+    
+    for alg_name, result in all_results.items():
+        final_pose = result['trajectory'][-1]
+        final_error = np.linalg.norm(result['errors'][-1])
+        iterations = len(result['trajectory'])
+        
+        print(f"\n{alg_name}:")
+        print(f"  Final Pose: [{final_pose[0]:.4f}, {final_pose[1]:.4f}, {final_pose[2]:.4f}, {final_pose[3]:.4f}]")
+        print(f"  Final Error Norm: {final_error:.6f}")
+        print(f"  Iterations: {iterations}")
+        print(f"  Joint Angles: [{result['final_pose'][0]:.4f}, {result['final_pose'][1]:.4f}, {result['final_pose'][2]:.4f}, {result['final_pose'][3]:.4f}]")
+        
+        # Individual error breakdown
+        final_errors = result['errors'][-1]
+        print(f"  Position Error: [{final_errors[0]:.4f}, {final_errors[1]:.4f}, {final_errors[2]:.4f}] m")
+        print(f"  Orientation Error: {final_errors[3]:.4f} rad")
+    
+    print("\n" + "="*80)
+    print("ANALYSIS COMPLETE")
+    print("="*80)
+    print("All plots generated showing:")
+    print("• 3D trajectories for all algorithms")
+    print("• Individual error evolution (X, Y, Z, Theta) for each algorithm") 
+    print("• Position/orientation trajectories for each algorithm")
+    print("• Joint angle evolution for each algorithm")
+    print("• Convergence rate comparison")
     print("="*80)
